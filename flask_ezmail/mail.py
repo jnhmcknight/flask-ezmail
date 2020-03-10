@@ -125,4 +125,4 @@ class Mail(_MailMixin):
             self.suppress = flask_app.config.get('FLASK_MAIL_SUPPRESS')
 
         if not self.debug:
-            self.debug = flask_app.config.get('FLASK_MAIL_DEBUG', flass_app.debug)
+            self.debug = flask_app.config.get('FLASK_MAIL_DEBUG', flask_app.debug)
