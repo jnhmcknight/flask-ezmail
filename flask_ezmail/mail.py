@@ -7,7 +7,7 @@ except ImportError:
     def _(string):
         return string
 
-from .connection import Connection
+from .connection import Connection, email_dispatched
 from .message import Message
 
 
@@ -29,9 +29,11 @@ class _MailMixin(object):
         if not email_dispatched:
             raise RuntimeError(_("blinker must be installed"))
 
+        original_suppress_value = self.suppress
+        self.suppress = True
         outbox = []
 
-        def _record(message, app):
+        def _record(message):
             outbox.append(message)
 
         email_dispatched.connect(_record)
@@ -40,6 +42,7 @@ class _MailMixin(object):
             yield outbox
         finally:
             email_dispatched.disconnect(_record)
+            self.suppress = original_suppress_value
 
     def send(self, message):
         """Sends a single message instance. If TESTING is True the message will
@@ -131,3 +134,4 @@ class Mail(_MailMixin):
             flask_app.extensions = {}
 
         flask_app.extensions.update({'ezmail': self})
+        self.flask_app = flask_app
