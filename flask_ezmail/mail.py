@@ -126,3 +126,8 @@ class Mail(_MailMixin):
 
         if not self.debug:
             self.debug = flask_app.config.get('FLASK_MAIL_DEBUG', flask_app.debug)
+
+        if not hasattr(flask_app, 'extensions'):
+            flask_app.extensions = {}
+
+        flask_app.extensions.update({'ezmail': self})
