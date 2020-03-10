@@ -1,6 +1,14 @@
+
 from contextlib import contextmanager
-from flask_ezmail.connection import Connection
-from flask_ezmail.message import Message
+
+try:
+    from babel import _
+except ImportError:
+    def _(string):
+        return string
+
+from .connection import Connection
+from .message import Message
 
 
 class _MailMixin(object):
@@ -19,7 +27,7 @@ class _MailMixin(object):
         """
 
         if not email_dispatched:
-            raise RuntimeError("blinker must be installed")
+            raise RuntimeError(_("blinker must be installed"))
 
         outbox = []
 
@@ -59,11 +67,21 @@ class _MailMixin(object):
 
 
 class Mail(_MailMixin):
+
     def __init__(
-        self, server, username, password, port, use_tls=False,
-        use_ssl=False, default_sender=None, debug=False,
-        max_emails=None, suppress=False,
+        self,
+        server=None,
+        username=None,
+        password=None,
+        port=None,
+        use_tls=False,
+        use_ssl=False,
+        default_sender=None,
+        debug=False,
+        max_emails=None,
+        suppress=False,
     ):
+
         self.server = server
         self.username = username
         self.password = password
@@ -74,3 +92,37 @@ class Mail(_MailMixin):
         self.debug = debug
         self.max_emails = max_emails
         self.suppress = suppress
+
+    def init_app(self, flask_app):
+        """Initialize this extension with values from the flask app config"""
+
+        if not self.server:
+            if not flask_app.config.get('FLASK_MAIL_SMTP_SERVER'):
+                raise ValueError(_('Missing FLASK_MAIL_SMTP_SERVER. Cannot proceed'))
+
+        if not self.username:
+            self.username = flask_app.config.get('FLASK_MAIL_SMTP_USERNAME')
+
+        if not self.password:
+            self.password = flask_app.config.get('FLASK_MAIL_SMTP_PASSWORD')
+
+        if not self.port:
+            self.port = flask_app.config.get('FLASK_MAIL_SMTP_PORT')
+
+        if not self.use_tls:
+            self.use_tls = flask_app.config.get('FLASK_MAIL_SMTP_USE_TLS')
+
+        if not self.use_ssl:
+            self.use_ssl = flask_app.config.get('FLASK_MAIL_SMTP_USE_SSL')
+
+        if not self.default_sender:
+            self.default_sender = flask_app.config.get('FLASK_MAIL_SMTP_DEFAULT_SENDER')
+
+        if not self.max_emails:
+            self.max_emails = flask_app.config.get('FLASK_MAIL_SMTP_MAX_EMAILS')
+
+        if not self.suppress:
+            self.suppress = flask_app.config.get('FLASK_MAIL_SMTP_SUPPRESS')
+
+        if not self.debug:
+            self.debug = flask_app.config.get('FLASK_MAIL_SMTP_DEBUG', flass_app.debug)
