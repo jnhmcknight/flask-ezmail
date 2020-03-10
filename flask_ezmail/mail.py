@@ -97,32 +97,32 @@ class Mail(_MailMixin):
         """Initialize this extension with values from the flask app config"""
 
         if not self.server:
-            if not flask_app.config.get('FLASK_MAIL_SMTP_SERVER'):
-                raise ValueError(_('Missing FLASK_MAIL_SMTP_SERVER. Cannot proceed'))
+            if not flask_app.config.get('FLASK_MAIL_SERVER'):
+                raise ValueError(_('Missing FLASK_MAIL_SERVER. Cannot proceed'))
 
         if not self.username:
-            self.username = flask_app.config.get('FLASK_MAIL_SMTP_USERNAME')
+            self.username = flask_app.config.get('FLASK_MAIL_USERNAME')
 
         if not self.password:
-            self.password = flask_app.config.get('FLASK_MAIL_SMTP_PASSWORD')
+            self.password = flask_app.config.get('FLASK_MAIL_PASSWORD')
 
         if not self.port:
-            self.port = flask_app.config.get('FLASK_MAIL_SMTP_PORT')
+            self.port = flask_app.config.get('FLASK_MAIL_PORT')
 
         if not self.use_tls:
-            self.use_tls = flask_app.config.get('FLASK_MAIL_SMTP_USE_TLS')
+            self.use_tls = flask_app.config.get('FLASK_MAIL_USE_TLS')
 
         if not self.use_ssl:
-            self.use_ssl = flask_app.config.get('FLASK_MAIL_SMTP_USE_SSL')
+            self.use_ssl = flask_app.config.get('FLASK_MAIL_USE_SSL')
 
         if not self.default_sender:
-            self.default_sender = flask_app.config.get('FLASK_MAIL_SMTP_DEFAULT_SENDER')
+            self.default_sender = flask_app.config.get('FLASK_MAIL_DEFAULT_SENDER')
 
         if not self.max_emails:
-            self.max_emails = flask_app.config.get('FLASK_MAIL_SMTP_MAX_EMAILS')
+            self.max_emails = flask_app.config.get('FLASK_MAIL_MAX_EMAILS')
 
         if not self.suppress:
-            self.suppress = flask_app.config.get('FLASK_MAIL_SMTP_SUPPRESS')
+            self.suppress = flask_app.config.get('FLASK_MAIL_SUPPRESS')
 
         if not self.debug:
-            self.debug = flask_app.config.get('FLASK_MAIL_SMTP_DEBUG', flass_app.debug)
+            self.debug = flask_app.config.get('FLASK_MAIL_DEBUG', flass_app.debug)
