@@ -66,6 +66,7 @@ class _MailMixin(object):
 
     def connect(self):
         """Opens a connection to the mail host."""
+
         return Connection(self)
 
 
@@ -102,6 +103,7 @@ class Mail(_MailMixin):
         if not self.server:
             if not flask_app.config.get('FLASK_MAIL_SERVER'):
                 raise ValueError(_('Missing FLASK_MAIL_SERVER. Cannot proceed'))
+            self.server = flask_app.config.get('FLASK_MAIL_SERVER')
 
         if not self.username:
             self.username = flask_app.config.get('FLASK_MAIL_USERNAME')

@@ -1,8 +1,11 @@
+
 import blinker
-from flask_ezmail.message import Message
-from flask_ezmail.utils import sanitize_address, PY3, sanitize_addresses
+import logging
 import smtplib
 import time
+
+from flask_ezmail.message import Message
+from flask_ezmail.utils import sanitize_address, PY3, sanitize_addresses
 
 signals = blinker.Namespace()
 
@@ -37,12 +40,15 @@ class Connection(object):
             host = smtplib.SMTP_SSL(self.mail.server, self.mail.port)
         else:
             host = smtplib.SMTP(self.mail.server, self.mail.port)
+
         if self.mail.debug is not None:
             host.set_debuglevel(int(self.mail.debug))
         else:
             host.set_debuglevel(int(False))
+
         if self.mail.use_tls:
             host.starttls()
+
         if self.mail.username and self.mail.password:
             host.login(self.mail.username, self.mail.password)
 
