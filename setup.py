@@ -6,7 +6,7 @@ with open('README.md', 'r') as fh:
 
 setup(
     name='flask-ezmail',
-    version='0.6.3.4',
+    version='0.6.3.5',
     url='https://github.com/JeffVandrewJr/flask-ezmail',
     license='MIT',
     author='Jeff Vandrew Jr',
