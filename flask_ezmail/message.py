@@ -241,6 +241,9 @@ class Message(object):
     def send(self, connection):
         """Verifies and sends the message."""
 
+        if not self.sender and connection.mail.default_sender:
+            self.sender = connection.mail.default_sender
+
         connection.send(self)
 
     def add_recipient(self, recipient):
