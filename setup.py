@@ -6,7 +6,7 @@ with open('README.md', 'r') as fh:
 
 setup(
     name='flask-ezmail',
-    version='0.6.3.5',
+    version='0.6.4.1',
     url='https://github.com/JeffVandrewJr/flask-ezmail',
     license='MIT',
     author='Jeff Vandrew Jr',
@@ -15,7 +15,8 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     install_requires=[
-        'blinker'
+        'blinker',
+        'inscriptis',
     ],
     packages=setuptools.find_packages(),
     classifiers=[

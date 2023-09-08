@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from email.utils import formatdate, make_msgid
 from flask_ezmail.utils import sanitize_address, sanitize_subject, force_text,\
         sanitize_addresses, message_policy, _has_newline, PY3, PY34
+from inscriptis import get_text
 import re
 import unicodedata
 
@@ -50,6 +51,8 @@ class Message(object):
         command
     :param rcpt_options:  A list of ESMTP options to be used in RCPT commands
     """
+
+    _body = None
 
     def __init__(self, subject='',
                  recipients=None,
@@ -105,6 +108,16 @@ class Message(object):
             self.alts.pop('html', None)
         else:
             self.alts['html'] = value
+
+    @property
+    def body(self):
+        if not self._body and self.html:
+            return get_text(self.html)
+        return self._body
+
+    @body.setter
+    def body(self, value):
+        self._body = value
 
     def _mimetext(self, text, subtype='plain'):
         """Creates a MIMEText object with the given subtype (default: 'plain')
