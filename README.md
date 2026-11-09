@@ -121,3 +121,20 @@ msg = Message(
 mail.send(msg)
 ```
 Flask-EZmail likewise uses the same `connect()` method as Flask-Mail for bulk emails.
+
+## Configuration via `init_app`
+
+`mail.init_app(app)` fills in any setting you did not pass to `Mail(...)` from
+`FLASK_MAIL_SERVER`, `FLASK_MAIL_PORT`, `FLASK_MAIL_USERNAME`,
+`FLASK_MAIL_PASSWORD`, `FLASK_MAIL_USE_TLS`, `FLASK_MAIL_USE_SSL`,
+`FLASK_MAIL_DEFAULT_SENDER`, `FLASK_MAIL_MAX_EMAILS`, `FLASK_MAIL_SUPPRESS`
+(defaults to `app.testing`) and `FLASK_MAIL_DEBUG` (defaults to `app.debug`).
+Arguments passed explicitly, including `False`, always win over the config.
+
+## Development
+
+```bash
+uv sync
+uv run pytest
+uv run mypy
+```

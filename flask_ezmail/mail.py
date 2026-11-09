@@ -1,20 +1,34 @@
+from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
 
-try:
-    from babel import _
-except ImportError:
-    def _(string):
-        return string
-
-from .connection import Connection, email_dispatched
+from .connection import Connection, _recordings
 from .message import Message
 
+if TYPE_CHECKING:
+    from flask import Flask
 
-class _MailMixin(object):
+#: ``app.config`` key prefix read by :meth:`Mail.init_app`.
+CONFIG_PREFIX = 'FLASK_MAIL_'
+
+
+class _MailMixin:
+
+    server: str | None
+    username: str | None
+    password: str | None
+    port: int | None
+    use_tls: bool | None
+    use_ssl: bool | None
+    default_sender: str | None
+    debug: bool | int | None
+    max_emails: int | None
+    suppress: bool | None
 
     @contextmanager
-    def record_messages(self):
+    def record_messages(self) -> Iterator[list[Message]]:
         """Records all messages. Use in unit tests for example::
 
             with mail.record_messages() as outbox:
@@ -22,31 +36,24 @@ class _MailMixin(object):
                 assert len(outbox) == 1
                 assert outbox[0].subject == "testing"
 
-        You must have blinker installed in order to use this feature.
+        While recording, nothing sent through this mail object is actually
+        delivered. Recording is scoped to the current thread / async task:
+        messages sent from other threads are neither captured nor
+        suppressed, and ``self.suppress`` is never modified.
+
         :versionadded: 0.4
         """
 
-        if not email_dispatched:
-            raise RuntimeError(_("blinker must be installed"))
-
-        original_suppress_value = self.suppress
-        self.suppress = True
-        outbox = []
-
-        def _record(message):
-            outbox.append(message)
-
-        email_dispatched.connect(_record)
-
+        outbox: list[Message] = []
+        token = _recordings.set(_recordings.get() + ((self, outbox),))
         try:
             yield outbox
         finally:
-            email_dispatched.disconnect(_record)
-            self.suppress = original_suppress_value
+            _recordings.reset(token)
 
-    def send(self, message):
-        """Sends a single message instance. If TESTING is True the message will
-        not actually be sent.
+    def send(self, message: Message) -> None:
+        """Sends a single message instance. If suppressed (e.g. when the app
+        is in testing mode) the message will not actually be sent.
 
         :param message: a Message instance.
         """
@@ -54,7 +61,7 @@ class _MailMixin(object):
         with self.connect() as connection:
             message.send(connection)
 
-    def send_message(self, *args, **kwargs):
+    def send_message(self, *args: Any, **kwargs: Any) -> None:
         """Shortcut for send(msg).
 
         Takes same arguments as Message constructor.
@@ -64,27 +71,33 @@ class _MailMixin(object):
 
         self.send(Message(*args, **kwargs))
 
-    def connect(self):
+    def connect(self) -> Connection:
         """Opens a connection to the mail host."""
 
         return Connection(self)
 
 
 class Mail(_MailMixin):
+    """Mail settings and sender.
+
+    Any argument left as ``None`` can be filled in later by :meth:`init_app`
+    from the Flask config. Arguments passed explicitly always win over the
+    config, including ``False`` values such as ``use_tls=False``.
+    """
 
     def __init__(
         self,
-        server=None,
-        username=None,
-        password=None,
-        port=None,
-        use_tls=False,
-        use_ssl=False,
-        default_sender=None,
-        debug=False,
-        max_emails=None,
-        suppress=False,
-    ):
+        server: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
+        port: int | None = None,
+        use_tls: bool | None = None,
+        use_ssl: bool | None = None,
+        default_sender: str | None = None,
+        debug: bool | int | None = None,
+        max_emails: int | None = None,
+        suppress: bool | None = None,
+    ) -> None:
 
         self.server = server
         self.username = username
@@ -97,43 +110,33 @@ class Mail(_MailMixin):
         self.max_emails = max_emails
         self.suppress = suppress
 
-    def init_app(self, flask_app):
-        """Initialize this extension with values from the flask app config"""
+    def init_app(self, flask_app: Flask) -> None:
+        """Fill any setting that was not passed explicitly from the Flask app
+        config (``FLASK_MAIL_*`` keys), then register the extension as
+        ``app.extensions['ezmail']``.
 
+        ``FLASK_MAIL_SUPPRESS`` defaults to ``app.testing`` and
+        ``FLASK_MAIL_DEBUG`` defaults to ``app.debug``.
+        """
+
+        config = flask_app.config
+
+        def fill(attr: str, default: Any = None) -> None:
+            if getattr(self, attr, None) is None:
+                setattr(self, attr, config.get(CONFIG_PREFIX + attr.upper(), default))
+
+        fill('server')
         if not self.server:
-            if not flask_app.config.get('FLASK_MAIL_SERVER'):
-                raise ValueError(_('Missing FLASK_MAIL_SERVER. Cannot proceed'))
-            self.server = flask_app.config.get('FLASK_MAIL_SERVER')
+            raise ValueError('Missing FLASK_MAIL_SERVER. Cannot proceed')
 
-        if not self.username:
-            self.username = flask_app.config.get('FLASK_MAIL_USERNAME')
+        fill('username')
+        fill('password')
+        fill('port')
+        fill('use_tls', False)
+        fill('use_ssl', False)
+        fill('default_sender')
+        fill('max_emails')
+        fill('suppress', flask_app.testing)
+        fill('debug', flask_app.debug)
 
-        if not self.password:
-            self.password = flask_app.config.get('FLASK_MAIL_PASSWORD')
-
-        if not self.port:
-            self.port = flask_app.config.get('FLASK_MAIL_PORT')
-
-        if not self.use_tls:
-            self.use_tls = flask_app.config.get('FLASK_MAIL_USE_TLS')
-
-        if not self.use_ssl:
-            self.use_ssl = flask_app.config.get('FLASK_MAIL_USE_SSL')
-
-        if not self.default_sender:
-            self.default_sender = flask_app.config.get('FLASK_MAIL_DEFAULT_SENDER')
-
-        if not self.max_emails:
-            self.max_emails = flask_app.config.get('FLASK_MAIL_MAX_EMAILS')
-
-        if not self.suppress:
-            self.suppress = flask_app.config.get('FLASK_MAIL_SUPPRESS')
-
-        if not self.debug:
-            self.debug = flask_app.config.get('FLASK_MAIL_DEBUG', flask_app.debug)
-
-        if not hasattr(flask_app, 'extensions'):
-            flask_app.extensions = {}
-
-        flask_app.extensions.update({'ezmail': self})
-        self.flask_app = flask_app
+        flask_app.extensions['ezmail'] = self
