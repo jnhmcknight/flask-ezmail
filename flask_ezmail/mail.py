@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Union
 
 from .connection import Connection, _recordings
 from .message import Message
@@ -12,6 +13,51 @@ if TYPE_CHECKING:
 
 #: ``app.config`` key prefix read by :meth:`Mail.init_app`.
 CONFIG_PREFIX = 'FLASK_MAIL_'
+
+#: Short names accepted for ``connection_class`` / ``FLASK_MAIL_CONNECTION_CLASS``.
+CONNECTION_ALIASES: dict[str, str] = {
+    'smtp': 'flask_ezmail.connection:Connection',
+    'ses': 'flask_ezmail.providers.ses:SESConnection',
+}
+
+ConnectionClass = Union[type[Connection], str]
+
+
+def resolve_connection_class(value: ConnectionClass | None) -> type[Connection]:
+    """Turn a ``connection_class`` setting into a :class:`Connection`
+    subclass.
+
+    Accepts ``None`` (plain SMTP), a class, an alias from
+    :data:`CONNECTION_ALIASES` (``'smtp'``, ``'ses'``, ...), or an import
+    path such as ``'myapp.mail:MyConnection'`` or
+    ``'myapp.mail.MyConnection'``.
+    """
+    if value is None:
+        return Connection
+
+    if isinstance(value, str):
+        path = CONNECTION_ALIASES.get(value.lower(), value)
+        if ':' in path:
+            module_name, _, attr = path.partition(':')
+        else:
+            module_name, _, attr = path.rpartition('.')
+        if not module_name or not attr:
+            raise ValueError(
+                f'Invalid connection class {value!r}: expected one of '
+                f'{sorted(CONNECTION_ALIASES)} or an import path like '
+                f"'package.module:ClassName'"
+            )
+        try:
+            resolved = getattr(importlib.import_module(module_name), attr)
+        except (ImportError, AttributeError) as exc:
+            raise ValueError(f'Cannot import connection class {value!r}: {exc}') from exc
+    else:
+        resolved = value
+
+    if not (isinstance(resolved, type) and issubclass(resolved, Connection)):
+        raise TypeError(f'{value!r} is not a flask_ezmail Connection subclass')
+
+    return resolved
 
 
 class _MailMixin:
@@ -26,6 +72,7 @@ class _MailMixin:
     debug: bool | int | None
     max_emails: int | None
     suppress: bool | None
+    connection_class: ConnectionClass | None
 
     @contextmanager
     def record_messages(self) -> Iterator[list[Message]]:
@@ -72,9 +119,10 @@ class _MailMixin:
         self.send(Message(*args, **kwargs))
 
     def connect(self) -> Connection:
-        """Opens a connection to the mail host."""
+        """Opens a connection to the mail host, using ``connection_class``
+        (plain SMTP by default)."""
 
-        return Connection(self)
+        return resolve_connection_class(getattr(self, 'connection_class', None))(self)
 
 
 class Mail(_MailMixin):
@@ -97,6 +145,7 @@ class Mail(_MailMixin):
         debug: bool | int | None = None,
         max_emails: int | None = None,
         suppress: bool | None = None,
+        connection_class: ConnectionClass | None = None,
     ) -> None:
 
         self.server = server
@@ -109,6 +158,7 @@ class Mail(_MailMixin):
         self.debug = debug
         self.max_emails = max_emails
         self.suppress = suppress
+        self.connection_class = connection_class
 
     def init_app(self, flask_app: Flask) -> None:
         """Fill any setting that was not passed explicitly from the Flask app
@@ -116,7 +166,9 @@ class Mail(_MailMixin):
         ``app.extensions['ezmail']``.
 
         ``FLASK_MAIL_SUPPRESS`` defaults to ``app.testing`` and
-        ``FLASK_MAIL_DEBUG`` defaults to ``app.debug``.
+        ``FLASK_MAIL_DEBUG`` defaults to ``app.debug``. The connection class
+        is resolved here, so a bad ``FLASK_MAIL_CONNECTION_CLASS`` fails at
+        startup rather than on the first send.
         """
 
         config = flask_app.config
@@ -125,8 +177,11 @@ class Mail(_MailMixin):
             if getattr(self, attr, None) is None:
                 setattr(self, attr, config.get(CONFIG_PREFIX + attr.upper(), default))
 
+        fill('connection_class')
+        self.connection_class = resolve_connection_class(self.connection_class)
+
         fill('server')
-        if not self.server:
+        if not self.server and self.connection_class.requires_server:
             raise ValueError('Missing FLASK_MAIL_SERVER. Cannot proceed')
 
         fill('username')

@@ -4,7 +4,7 @@ import smtplib
 import time
 from contextvars import ContextVar
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast
 
 import blinker
 from flask import current_app, has_app_context
@@ -70,6 +70,10 @@ class SMTPHost(Protocol):
 
 class Connection:
     """Handles connection to host."""
+
+    #: Whether :meth:`~flask_ezmail.mail.Mail.init_app` must find a
+    #: ``FLASK_MAIL_SERVER``. API-based providers set this to ``False``.
+    requires_server: ClassVar[bool] = True
 
     host: SMTPHost | None
 

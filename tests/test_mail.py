@@ -7,7 +7,9 @@ import threading
 import pytest
 from flask import Flask
 
-from flask_ezmail import Mail, Message
+from flask_ezmail import Connection, Mail, Message
+from flask_ezmail.mail import resolve_connection_class
+from flask_ezmail.providers.ses import SESConnection
 
 
 def make_msg(**kwargs) -> Message:
@@ -289,3 +291,95 @@ class TestRecordMessages:
             assert [m.subject for m in outboxes[i]] == [f'rec-{i}']
         assert len(smtp.instances) == 1
         assert mail.suppress is None
+
+
+class CustomConnection(Connection):
+    requires_server = False
+
+
+class NotAConnection:
+    pass
+
+
+class TestConnectionClass:
+    def test_defaults_to_smtp(self, app):
+        mail = Mail()
+        mail.init_app(app)
+        assert mail.connection_class is Connection
+        assert type(mail.connect()) is Connection
+
+    def test_connect_without_init_app(self, mail):
+        assert type(mail.connect()) is Connection
+
+    @pytest.mark.parametrize('alias, expected', [
+        ('smtp', Connection),
+        ('ses', SESConnection),
+        ('SES', SESConnection),
+    ])
+    def test_aliases(self, alias, expected):
+        assert resolve_connection_class(alias) is expected
+
+    @pytest.mark.parametrize('path', [
+        f'{__name__}:CustomConnection',
+        f'{__name__}.CustomConnection',
+    ])
+    def test_import_paths(self, path):
+        assert resolve_connection_class(path) is CustomConnection
+
+    def test_class_passes_through(self):
+        assert resolve_connection_class(CustomConnection) is CustomConnection
+
+    @pytest.mark.parametrize('value', ['nope', 'no_such_module:X', f'{__name__}:Missing'])
+    def test_bad_strings(self, value):
+        with pytest.raises(ValueError, match=repr(value)):
+            resolve_connection_class(value)
+
+    @pytest.mark.parametrize('value', [NotAConnection, f'{__name__}:NotAConnection', 42])
+    def test_not_a_connection(self, value):
+        with pytest.raises(TypeError, match='not a flask_ezmail Connection'):
+            resolve_connection_class(value)  # type: ignore[arg-type]
+
+    def test_from_config_without_server(self):
+        app = Flask(__name__)
+        app.config['FLASK_MAIL_CONNECTION_CLASS'] = 'ses'
+        mail = Mail()
+        mail.init_app(app)
+        assert mail.connection_class is SESConnection
+        assert mail.server is None
+
+    def test_explicit_wins_over_config(self):
+        app = Flask(__name__)
+        app.config['FLASK_MAIL_CONNECTION_CLASS'] = 'smtp'
+        mail = Mail(connection_class=CustomConnection)
+        mail.init_app(app)
+        assert mail.connection_class is CustomConnection
+
+    def test_smtp_still_requires_server(self):
+        app = Flask(__name__)
+        app.config['FLASK_MAIL_CONNECTION_CLASS'] = 'smtp'
+        with pytest.raises(ValueError, match='FLASK_MAIL_SERVER'):
+            Mail().init_app(app)
+
+    def test_bad_config_fails_at_init(self):
+        app = Flask(__name__)
+        app.config['FLASK_MAIL_CONNECTION_CLASS'] = 'nope'
+        with pytest.raises(ValueError, match='nope'):
+            Mail(server='x').init_app(app)
+
+    def test_send_uses_configured_connection(self, monkeypatch):
+        sent = []
+        monkeypatch.setattr(CustomConnection, 'configure_host', lambda self: None)
+        monkeypatch.setattr(
+            CustomConnection, 'send', lambda self, message, envelope_from=None: sent.append(message)
+        )
+        mail = Mail(default_sender='a@x.com', connection_class=CustomConnection)
+        msg = make_msg()
+        mail.send(msg)
+        assert sent == [msg]
+
+    def test_picklable_with_provider(self):
+        app = Flask(__name__)
+        app.config['FLASK_MAIL_CONNECTION_CLASS'] = 'ses'
+        mail = Mail()
+        mail.init_app(app)
+        assert pickle.loads(pickle.dumps(mail)).connection_class is SESConnection

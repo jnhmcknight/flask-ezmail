@@ -46,7 +46,8 @@ def create_app():
 
 | Config key | Default |
 |---|---|
-| `FLASK_MAIL_SERVER` | required: `ValueError` if missing |
+| `FLASK_MAIL_CONNECTION_CLASS` | `'smtp'` (see [Amazon SES](#amazon-ses)) |
+| `FLASK_MAIL_SERVER` | required for SMTP: `ValueError` if missing |
 | `FLASK_MAIL_PORT` | `None` (smtplib's default: 25, or 465 for SSL) |
 | `FLASK_MAIL_USERNAME` | `None` |
 | `FLASK_MAIL_PASSWORD` | `None` |
@@ -188,6 +189,32 @@ msg.attach('logo.png', data=png_bytes, disposition='inline', headers={'Content-I
 with mail.connect() as conn:
     for user in users:
         conn.send(Message('Newsletter', recipients=[user.email], body='...'))
+```
+
+## Amazon SES
+
+Instead of SMTP, mail can go through the SES v2 API with boto3, so credentials come from the standard AWS chain (instance profiles, ECS task roles, EKS pod identity, Lambda roles, `AWS_PROFILE` / SSO) and there are no SMTP passwords to store or rotate.
+
+```bash
+pip install 'flask-ezmail-ng[ses]'
+```
+
+```python
+FLASK_MAIL_CONNECTION_CLASS = 'ses'
+FLASK_MAIL_DEFAULT_SENDER = 'noreply@example.com'
+
+# All optional:
+FLASK_MAIL_SES_REGION = 'us-east-1'            # else boto3's normal region lookup
+FLASK_MAIL_SES_PROFILE = 'mail'                # else the default credential chain
+FLASK_MAIL_SES_CONFIGURATION_SET = 'tracking'  # attached to every message
+```
+
+`FLASK_MAIL_SERVER` and the other SMTP settings are not needed. The role needs `ses:SendEmail` and `ses:SendRawEmail` on the sending identity (and on the configuration set, if one is used). Bcc recipients are delivered without appearing in the headers. A rejected send raises `flask_ezmail.providers.ses.SESSendError`, a subclass of `smtplib.SMTPException`.
+
+`connection_class` (or `FLASK_MAIL_CONNECTION_CLASS`) also accepts a `Connection` subclass or an import path such as `'myapp.mail:MyConnection'`, for custom providers:
+
+```python
+mail = Mail(connection_class='ses')
 ```
 
 ## Testing
